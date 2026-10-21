@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>พิกัดลับ · Secret Spot</title>
+<meta name="description" content="ปริศนารายวันแบบนักสัญลักษณ์วิทยา: ถอดรหัสคำใบ้ 5 ข้อ แล้วปักหมุดสถานที่ประวัติศาสตร์บนแผนที่โลก · A daily symbologist's riddle: decode five clues and pin the historic place on the world map.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Noto+Serif+Thai:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+/* Single dark look: a candle-lit archive. Gold leaf for structure, wax red for the live pin. */
+:root {
+  --bg: #100e0b; --panel: #1a1611; --panel-2: #221d16; --ink: #ece2c8; --muted: #a8997a; --line: #3a3124; --gold: #c9a24a; --gold-dim: #8a7034;
+  --wax: #b3362b; --wax-ink: #fff4e6;
+  --hit: #4e9a5f; --warm: #c9a24a; --mid: #c8702e; --cold: #a8322a; --empty: #1f1a14;
+  --font-display: "Cinzel", "Noto Serif Thai", Georgia, serif;
+  --font-body: "Noto Serif Thai", Georgia, "Leelawadee UI", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Consolas", monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  background-image: radial-gradient(1200px 600px at 70% -10%, rgba(201,162,74,.08), transparent 60%);
+  font-family: var(--font-body); font-size: 15.5px; line-height: 1.65;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: max(16px, env(safe-area-inset-top, 0px)) 24px;
+}
+button { font: inherit; color: inherit; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.top { max-width: 1280px; margin: 0 auto 14px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--font-display); font-weight: 700; font-size: 27px; letter-spacing: .06em; line-height: 1; display: flex; align-items: center; gap: 10px; color: var(--gold); }
+.caseno { font-family: var(--font-mono); font-size: 12.5px; color: var(--muted); padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; }
+.top .spacer { flex: 1; }
+.ghost { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 14px; color: var(--ink); }
+.ghost:hover { border-color: var(--gold-dim); }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.lang button { background: none; border: 0; padding: 6px 11px; cursor: pointer; font-size: 14px; color: var(--muted); }
+.lang button[aria-pressed="true"] { background: var(--gold); color: #1a1408; }
+
+.app { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+.mapwrap { position: relative; height: clamp(380px, 64vh, 560px); border-radius: 10px; overflow: hidden; border: 1px solid var(--gold-dim); box-shadow: 0 0 0 4px var(--panel), 0 0 0 5px var(--line); }
+@media (min-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1.3fr) minmax(340px, 1fr); align-items: start; }
+  .mapwrap { position: sticky; top: 16px; height: min(880px, calc(100dvh - 96px)); min-height: 560px; }
+}
+#map { width: 100%; height: 100%; cursor: crosshair; background: #2a241b; }
+#map .leaflet-tile-pane { filter: sepia(.25) contrast(1.03); }
+.leaflet-container { font-family: var(--font-body); }
+.leaflet-bar a { background: var(--panel); color: var(--ink); border-color: var(--line); }
+.leaflet-control-attribution { background: rgba(26,22,17,.85) !important; color: var(--muted); }
+.leaflet-control-attribution a { color: var(--gold); }
+.hud { position: absolute; left: 10px; right: 10px; bottom: 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; z-index: 500; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.readout { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 13px; min-width: 0; }
+.readout .mono { color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+.confirm { background: var(--wax); color: var(--wax-ink); border: 0; border-radius: 6px; padding: 9px 16px; font-family: var(--font-display); font-weight: 700; letter-spacing: .04em; font-size: 15px; cursor: pointer; }
+.confirm:disabled { opacity: .4; cursor: not-allowed; }
+.pin { background: none; border: 0; }
+
+.file { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; min-width: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--gold-dim); }
+.object { font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1.25; margin: 4px 0 6px; color: var(--ink); }
+.brief { margin: 0; max-width: 62ch; color: var(--muted); }
+.clues { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.clue { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: center; padding: 11px 14px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.clue .n { font-family: "Cinzel", Georgia, serif; font-weight: 700; font-size: 15px; color: var(--gold); text-align: center; border-right: 1px solid var(--line); padding-right: 8px; }
+.clue .txt { margin: 0; }
+.clue:first-child .txt { font-style: italic; }
+.clue.locked { background: none; border-style: dashed; color: var(--muted); }
+.clue.locked .n { color: var(--gold-dim); }
+.clue.new { animation: reveal .6s ease-out; }
+@keyframes reveal { from { opacity: .2; filter: blur(3px); } to { opacity: 1; filter: none; } }
+
+.rows { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.row { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto 30px; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 7px; background: var(--empty); min-height: 42px; }
+.row .i { font-family: "Cinzel", Georgia, serif; font-size: 13px; color: var(--gold-dim); }
+.row .place { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row .km { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 13.5px; }
+.row .dir { width: 30px; height: 30px; border-radius: 6px; display: grid; place-items: center; color: #fff; }
+.row.filled { background: transparent; border: 1px solid var(--line); }
+.t-hit { background: var(--hit); } .t-warm { background: var(--warm); color: #1a1408 !important; } .t-mid { background: var(--mid); } .t-cold { background: var(--cold); }
+.legend { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+.result { border-color: var(--gold-dim); }
+.result h2 { font-family: var(--font-display); font-size: 22px; margin: 2px 0 4px; line-height: 1.3; color: var(--gold); }
+.result p { margin: 0 0 10px; }
+.share { font-family: var(--font-mono); white-space: pre; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; padding: 10px 12px; font-size: 13.5px; line-height: 1.5; overflow-x: auto; user-select: all; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.btn { background: var(--gold); color: #1a1408; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-block; }
+.btn.alt { background: none; color: var(--ink); border: 1px solid var(--line); }
+.next { font-size: 13px; color: var(--muted); }
+
+.foot { max-width: 1280px; margin: 18px auto 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.foot img { height: 20px; display: block; }
+.foot a { color: var(--gold); }
+
+dialog { border: 1px solid var(--gold-dim); border-radius: 10px; background: var(--panel); color: var(--ink); max-width: min(540px, calc(100vw - 32px)); padding: 20px 22px; }
+dialog::backdrop { background: rgba(0, 0, 0, .6); }
+dialog h3 { font-family: var(--font-display); font-size: 21px; margin: 0 0 8px; color: var(--gold); }
+dialog ol { padding-left: 20px; margin: 0 0 12px; }
+@media (prefers-reduced-motion: reduce) { .clue.new { animation: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true"><circle cx="13" cy="13" r="11.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 3 L20 18 H6 Z" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M13 23 L6 8 H20 Z" fill="none" stroke="currentColor" stroke-width="1.5" opacity=".55"/></svg>
+    <span data-t="brand">พิกัดลับ</span>
+  </div>
+  <span class="caseno" id="caseno"></span>
+  <span class="spacer"></span>
+  <div class="lang" role="group" aria-label="Language">
+    <button type="button" data-lang="th" aria-pressed="true">ไทย</button>
+    <button type="button" data-lang="en" aria-pressed="false">EN</button>
+  </div>
+  <button class="ghost" id="helpBtn" type="button" data-t="help">วิธีเล่น</button>
+</header>
+
+<main class="app">
+  <section class="mapwrap" aria-label="Map">
+    <div id="map"></div>
+    <div class="hud">
+      <div class="readout" id="readout"></div>
+      <button class="confirm" id="confirm" type="button" disabled data-t="confirm">ยืนยันหมุด</button>
+    </div>
+  </section>
+
+  <div class="file">
+    <article class="card">
+      <div class="eyebrow" data-t="daily"></div>
+      <h1 class="object" data-t="question"></h1>
+      <p class="brief" data-t="brief"></p>
+      <ol class="clues" id="clues"></ol>
+    </article>
+
+    <article class="card result" id="resultCard" hidden></article>
+
+    <article class="card">
+      <div class="eyebrow"><span data-t="yourPins"></span> <span id="tries"></span></div>
+      <div class="rows" id="rows"></div>
+      <div class="legend">
+        <span><i class="t-hit"></i><span data-t="lgHit"></span></span>
+        <span><i class="t-warm"></i>≤ 50 <span data-t="km"></span></span>
+        <span><i class="t-mid"></i>≤ 500 <span data-t="km"></span></span>
+        <span><i class="t-cold"></i><span data-t="lgCold"></span></span>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="foot">
+  <span data-t="visits"></span>
+  <img id="visitBadge" alt="">
+  <span>·</span>
+  <a href="./" data-t="thaiLink"></a>
+</footer>
+
+<dialog id="help">
+  <h3 data-t="helpTitle"></h3>
+  <ol id="helpList"></ol>
+  <form method="dialog"><button class="btn" type="submit" data-t="gotIt"></button></form>
+</dialog>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+// World riddles in the spirit of a symbologist's chase.
+// Clue I is a cryptic line, II a symbol, III a person or history, IV the region, V nearly gives it away.
+const CASES = [
+  { lat: 48.8611, lon: 2.3358,
+    th: { place: "พีระมิดแก้ว พิพิธภัณฑ์ลูฟวร์ ปารีส", clues: [
+      "ที่ซึ่งใบมีดกับจอกจูบกันใต้ดวงดาว ผู้แสวงหาย่อมคุกเข่าลง",
+      "สามเหลี่ยมชี้ฟ้า กับสามเหลี่ยมชี้ดิน: ชายและหญิงศักดิ์สิทธิ์",
+      "ลือกันว่ามีกระจก 666 บาน ออกแบบโดยสถาปนิกเชื้อสายจีนเมื่อปี 1989",
+      "อยู่ริมแม่น้ำแซน ในวังเก่าของกษัตริย์ฝรั่งเศส",
+      "บ้านของโมนาลิซ่า" ] },
+    en: { place: "Louvre Pyramid, Paris", clues: [
+      "Where blade and chalice meet beneath the stars, the seeker kneels",
+      "One triangle points to heaven, one to earth: the masculine and the sacred feminine",
+      "Rumoured to have 666 panes; designed by a Chinese-American architect in 1989",
+      "On the Seine, inside an old palace of French kings",
+      "Home of the Mona Lisa" ] } },
+  { lat: 55.8554, lon: -3.1600,
+    th: { place: "โบสถ์รอสลิน สกอตแลนด์", clues: [
+      "จอกศักดิ์สิทธิ์รออยู่ใต้เส้นกุหลาบโบราณ",
+      "ลูกบาศก์หินสลักลวดลาย 213 ลูกบนเพดาน ที่บางคนเชื่อว่าเป็นโน้ตดนตรีลับ",
+      "ตระกูลซินแคลร์เริ่มสร้างเมื่อปี 1446",
+      "อยู่ในสกอตแลนด์ ห่างเอดินบะระไปทางใต้ไม่ไกล",
+      "ที่นี่มี 'เสาของช่างฝึกหัด' ที่สลักลวดลายวิจิตร" ] },
+    en: { place: "Rosslyn Chapel, Scotland", clues: [
+      "The Grail waits beneath the ancient Rose Line",
+      "213 carved stone cubes on the ceiling, said by some to hide secret music",
+      "Begun by the Sinclair family in 1446",
+      "In Scotland, a short way south of Edinburgh",
+      "Home of the richly carved Apprentice Pillar" ] } },
+  { lat: 41.8986, lon: 12.4769,
+    th: { place: "วิหารแพนธีออน โรม", clues: [
+      "หลุมศพบนโลกของซานติ กับรูของปีศาจ",
+      "รูกลมกลางโดมเปิดรับแสงจากฟ้า ฝนตกลงมาถึงพื้นได้",
+      "ราฟาเอล จิตรกรเอกแห่งยุคฟื้นฟูศิลปวิทยา ถูกฝังที่นี่",
+      "อยู่ในเมืองหลวงของอิตาลี",
+      "วิหารโรมันโบราณที่มีโดมคอนกรีตไม่เสริมเหล็กใหญ่ที่สุดในโลก" ] },
+    en: { place: "Pantheon, Rome", clues: [
+      "Santi's earthly tomb, and the demon's hole",
+      "A round opening at the top of the dome lets in the sky, and the rain",
+      "Raphael, the Renaissance master, is buried here",
+      "In the capital of Italy",
+      "An ancient Roman temple with the world's largest unreinforced concrete dome" ] } },
+  { lat: 41.4036, lon: 2.1744,
+    th: { place: "มหาวิหารซากราดาฟามีเลีย บาร์เซโลนา", clues: [
+      "บทสวดที่ยังไม่จบ แม้ผ่านไปกว่าร้อยปี",
+      "ตารางตัวเลขบนกำแพง ทุกแถวรวมได้ 33 เท่าอายุพระเยซูเมื่อสิ้นพระชนม์",
+      "สถาปนิกผู้ออกแบบถูกรถรางชนเสียชีวิตเมื่อปี 1926",
+      "อยู่ในแคว้นกาตาลุญญา ประเทศสเปน",
+      "ผลงานชิ้นเอกของอันโตนี เกาดี" ] },
+    en: { place: "Sagrada Família, Barcelona", clues: [
+      "A hymn still unfinished after more than a century",
+      "A number grid on the wall where every line adds up to 33, Christ's age at death",
+      "Its architect died after being hit by a tram in 1926",
+      "In Catalonia, Spain",
+      "Antoni Gaudí's masterpiece" ] } },
+  { lat: 38.8899, lon: -77.0091,
+    th: { place: "อาคารรัฐสภาสหรัฐฯ วอชิงตัน ดี.ซี.", clues: [
+      "มือที่ถูกสักด้วยอักษรลึกลับ ชี้ขึ้นฟ้ากลางห้องโถงทรงกลม",
+      "ภาพวาดบนโดม: ผู้นำถูกยกขึ้นเป็นเทพท่ามกลางเทพเจ้ากรีก",
+      "จอร์จ วอชิงตันวางศิลาฤกษ์เมื่อปี 1793 ในพิธีแบบฟรีเมสัน",
+      "อยู่ในเมืองหลวงของสหรัฐอเมริกา",
+      "อาคารโดมสีขาวที่เป็นที่ประชุมสภาคองเกรส" ] },
+    en: { place: "United States Capitol, Washington, D.C.", clues: [
+      "A tattooed hand points to the heavens in a round hall",
+      "A ceiling fresco where a leader rises to join the gods",
+      "George Washington laid its cornerstone in 1793 in a Masonic ceremony",
+      "In the capital of the United States",
+      "The white-domed home of Congress" ] } },
+  { lat: 29.9792, lon: 31.1342,
+    th: { place: "มหาพีระมิดแห่งกีซา อียิปต์", clues: [
+      "ดวงตาที่ลอยอยู่เหนือยอดที่หายไป ปรากฏบนธนบัตรดอลลาร์",
+      "รูปทรงที่ฐานสี่เหลี่ยม ยอดแหลมชี้ฟ้า",
+      "สร้างให้ฟาโรห์คูฟูเมื่อราว 4,500 ปีก่อน",
+      "อยู่ชานกรุงไคโร",
+      "สิ่งมหัศจรรย์ของโลกยุคโบราณเพียงหนึ่งเดียวที่ยังเหลืออยู่" ] },
+    en: { place: "Great Pyramid of Giza, Egypt", clues: [
+      "The eye above the missing capstone, printed on the dollar bill",
+      "A square base rising to a single point",
+      "Built for the pharaoh Khufu about 4,500 years ago",
+      "On the edge of Cairo",
+      "The only Wonder of the Ancient World still standing" ] } },
+  { lat: 43.7694, lon: 11.2560,
+    th: { place: "ปาลาซโซเวคคิโอ ฟลอเรนซ์", clues: [
+      "'จงแสวงหา แล้วจะพบ' สองคำซ่อนอยู่บนภาพสงคราม",
+      "หน้ากากมรณะของกวีผู้พาเราเดินผ่านนรก",
+      "จอร์โจ วาซารีวาดภาพในห้องโถง 500 ที่นี่",
+      "อยู่ในแคว้นทัสคานี ประเทศอิตาลี",
+      "วังเก่าที่มีหอคอยสูง หน้าจัตุรัสที่มีรูปปั้นเดวิดจำลอง" ] },
+    en: { place: "Palazzo Vecchio, Florence", clues: [
+      "'Seek and you shall find': two words hidden in a battle painting",
+      "The death mask of the poet who led us through Hell",
+      "Giorgio Vasari painted the Hall of the Five Hundred here",
+      "In Tuscany, Italy",
+      "The old palace with a tall tower, beside a copy of Michelangelo's David" ] } },
+  { lat: 51.4995, lon: -0.1273,
+    th: { place: "เวสต์มินสเตอร์แอบบีย์ ลอนดอน", clues: [
+      "ในลอนดอน มีอัศวินที่ 'โป๊ป' เป็นผู้ฝัง",
+      "ตามหาลูกกลมที่ควรอยู่บนหลุมศพ",
+      "อัศวินคือไอแซก นิวตัน ส่วนกวีอเล็กซานเดอร์ โป๊ปเขียนคำจารึกให้",
+      "อยู่ในลอนดอน ใกล้หอนาฬิกาบิ๊กเบน",
+      "โบสถ์ที่ใช้ทำพิธีราชาภิเษกของกษัตริย์อังกฤษ" ] },
+    en: { place: "Westminster Abbey, London", clues: [
+      "In London, a knight laid to rest by a 'Pope'",
+      "Look for the orb that ought to be on the tomb",
+      "The knight is Isaac Newton; the poet Alexander Pope wrote his epitaph",
+      "In London, close to Big Ben",
+      "Where English monarchs are crowned" ] } },
+  { lat: 30.3222, lon: 35.4514,
+    th: { place: "คลังสมบัติ (อัลคาซเนห์) เปตรา จอร์แดน", clues: [
+      "คลังสมบัติที่ไม่มีสมบัติ แกะสลักจากหน้าผาสีกุหลาบ",
+      "โกศหินบนยอดอาคาร มีรอยกระสุนของคนที่คิดว่ามีทองซ่อนอยู่",
+      "ชาวนาบาเทียนสลักไว้เมื่อราว 2,000 ปีก่อน",
+      "อยู่ในประเทศจอร์แดน",
+      "ฉากตามหาจอกศักดิ์สิทธิ์ในหนัง Indiana Jones ปี 1989" ] },
+    en: { place: "The Treasury (Al-Khazneh), Petra, Jordan", clues: [
+      "A treasury with no treasure, carved from a rose-red cliff",
+      "A stone urn on top, scarred by bullets from men hoping it held gold",
+      "Carved by the Nabataeans about 2,000 years ago",
+      "In Jordan",
+      "Where Indiana Jones found the Grail in 1989" ] } },
+  { lat: 50.0870, lon: 14.4207,
+    th: { place: "นาฬิกาดาราศาสตร์ เมืองเก่าปราก", clues: [
+      "ทุกชั่วโมง โครงกระดูกจะดึงเชือกเตือนว่าเวลาหมดลง",
+      "หน้าปัดบอกตำแหน่งดวงอาทิตย์และดวงจันทร์ อัครสาวก 12 องค์โผล่ออกมาจากหน้าต่าง",
+      "สร้างเมื่อปี 1410 เป็นนาฬิกาดาราศาสตร์เก่าแก่ที่สุดในโลกที่ยังเดินอยู่",
+      "อยู่ในเมืองร้อยยอดแหลม สาธารณรัฐเช็ก",
+      "ติดผนังศาลาว่าการเมืองเก่า กลางจัตุรัสเมืองเก่า" ] },
+    en: { place: "Astronomical Clock, Old Town Prague", clues: [
+      "Every hour a skeleton pulls a cord to say your time is up",
+      "A dial tracks the sun and moon; twelve apostles appear at the windows",
+      "Built in 1410, the oldest astronomical clock still working",
+      "In the City of a Hundred Spires, Czech Republic",
+      "On the Old Town Hall, in Old Town Square" ] } },
+  { lat: 41.9031, lon: 12.4663,
+    th: { place: "ปราสาทซานตันเจโล โรม", clues: [
+      "ทางแห่งแสงสว่างสิ้นสุดที่บ้านของเทวดา",
+      "รูปปั้นเทวดากำลังเก็บดาบเข้าฝักบนยอดปราสาท",
+      "เดิมสร้างเป็นสุสานของจักรพรรดิฮาเดรียน",
+      "อยู่ริมแม่น้ำไทเบอร์ ในกรุงโรม",
+      "มีทางเดินลับบนกำแพงชื่อ Passetto เชื่อมไปยังวาติกัน" ] },
+    en: { place: "Castel Sant'Angelo, Rome", clues: [
+      "The Path of Illumination ends at the angel's house",
+      "A statue of an angel sheathing his sword stands on top",
+      "Built as the tomb of Emperor Hadrian",
+      "On the Tiber, in Rome",
+      "A secret walled passage, the Passetto, links it to the Vatican" ] } },
+  { lat: -13.1631, lon: -72.5450,
+    th: { place: "มาชูปิกชู เปรู", clues: [
+      "เมืองในเมฆที่ผู้พิชิตชาวสเปนหาไม่เคยเจอ",
+      "เสาหินที่เชื่อว่าใช้ 'ผูกดวงอาทิตย์' ไว้",
+      "สร้างในสมัยจักรพรรดิปาชาคูตีแห่งอินคา",
+      "อยู่บนเทือกเขาแอนดีส ประเทศเปรู",
+      "นครที่สาบสูญของชาวอินคา" ] },
+    en: { place: "Machu Picchu, Peru", clues: [
+      "A city in the clouds the Spanish conquerors never found",
+      "A carved stone believed to 'tie the sun'",
+      "Built under the Inca emperor Pachacuti",
+      "High in the Andes of Peru",
+      "The lost city of the Incas" ] } },
+  { lat: 41.0086, lon: 28.9802,
+    th: { place: "ฮาเกียโซเฟีย อิสตันบูล", clues: [
+      "ใต้โดมที่ลอยเหนือแผ่นดิน นอนอยู่ชายผู้ตัดหัวม้า",
+      "ป้ายหลุมศพของดอจแห่งเวนิสบนชั้นลอย",
+      "จักรพรรดิจัสติเนียนสร้างเสร็จเมื่อปี 537",
+      "อยู่ในเมืองที่ตั้งคร่อมสองทวีป",
+      "โบสถ์ที่กลายเป็นมัสยิด มีหออะซานสี่หอ" ] },
+    en: { place: "Hagia Sophia, Istanbul", clues: [
+      "Beneath a dome that floats above the earth lies the man who beheaded horses",
+      "A Venetian doge's tomb marker in the upper gallery",
+      "Completed by Emperor Justinian in 537",
+      "In the city that spans two continents",
+      "A church turned mosque, with four minarets" ] } },
+  { lat: 45.4660, lon: 9.1710,
+    th: { place: "ภาพพระกระยาหารมื้อสุดท้าย ซานตามาเรียเดลเลกราซี มิลาน", clues: [
+      "สิบสามคนร่วมมื้อสุดท้าย แต่บนโต๊ะไม่มีจอก",
+      "ตัว V ที่ซ่อนอยู่ระหว่างสองร่าง",
+      "เลโอนาร์โด ดา วินชีวาดไว้บนผนังโรงอาหารของอาราม",
+      "อยู่ในเมืองแฟชั่นทางเหนือของอิตาลี",
+      "อารามซานตามาเรียเดลเลกราซี" ] },
+    en: { place: "The Last Supper, Santa Maria delle Grazie, Milan", clues: [
+      "Thirteen at the final meal, yet no chalice on the table",
+      "A V hidden between two figures",
+      "Leonardo da Vinci painted it on a monastery dining-hall wall",
+      "In the fashion capital of northern Italy",
+      "The convent of Santa Maria delle Grazie" ] } },
+  { lat: 51.1789, lon: -1.8262,
+    th: { place: "สโตนเฮนจ์ อังกฤษ", clues: [
+      "วงกลมที่รอต้อนรับดวงอาทิตย์ในวันที่ยาวที่สุดของปี",
+      "หินตั้งเป็นคู่ มีหินอีกก้อนพาดอยู่ด้านบน",
+      "สร้างเมื่อราว 5,000 ปีก่อน ไม่มีใครรู้แน่ว่าสร้างไว้ทำอะไร",
+      "อยู่บนทุ่งซอลส์บรี ประเทศอังกฤษ",
+      "วงหินที่โด่งดังที่สุดในโลก" ] },
+    en: { place: "Stonehenge, England", clues: [
+      "A circle that greets the sun on the longest day",
+      "Stones standing in pairs with a lintel laid across",
+      "About 5,000 years old; no one knows its purpose for sure",
+      "On Salisbury Plain, England",
+      "The world's most famous stone circle" ] } },
+  { lat: 41.9022, lon: 12.4568,
+    th: { place: "จัตุรัสนักบุญเปโตร นครรัฐวาติกัน", clues: [
+      "ลมตะวันตกเป่าลมหายใจของพระเจ้า",
+      "แผ่นหินบนพื้นสลักใบหน้ากำลังเป่าลม",
+      "เบอร์นินีออกแบบแนวเสาโค้งที่โอบล้อมเหมือนอ้อมแขน",
+      "อยู่ในประเทศที่เล็กที่สุดในโลก",
+      "ลานหน้ามหาวิหาร มีเสาโอเบลิสก์อียิปต์ตั้งอยู่ตรงกลาง" ] },
+    en: { place: "St. Peter's Square, Vatican City", clues: [
+      "The west wind breathes the breath of God",
+      "A paving stone carved with a face blowing wind",
+      "Bernini designed its colonnades like embracing arms",
+      "In the smallest country in the world",
+      "The square before the great basilica, with an Egyptian obelisk at its centre" ] } },
+  { lat: 43.2687, lon: -2.9340,
+    th: { place: "พิพิธภัณฑ์กุกเกนไฮม์ บิลเบา", clues: [
+      "เรือไทเทเนียมที่จอดนิ่งอยู่ริมแม่น้ำ",
+      "แมงมุมยักษ์ชื่อ 'แม่' เฝ้าอยู่หน้าอาคาร",
+      "แฟรงก์ เกห์รีออกแบบ เปิดเมื่อปี 1997",
+      "อยู่ในแคว้นบาสก์ ประเทศสเปน",
+      "พิพิธภัณฑ์ศิลปะที่มีลูกหมาดอกไม้ยักษ์อยู่ด้านหน้า" ] },
+    en: { place: "Guggenheim Museum, Bilbao", clues: [
+      "A titanium ship moored by the river",
+      "A giant spider named 'Mother' guards the building",
+      "Designed by Frank Gehry, opened in 1997",
+      "In the Basque Country, Spain",
+      "The art museum with a giant puppy made of flowers out front" ] } },
+  { lat: 48.4476, lon: 1.4876,
+    th: { place: "มหาวิหารชาตร์ ฝรั่งเศส", clues: [
+      "เขาวงกตที่เดินอย่างไรก็ไม่มีวันหลง",
+      "เขาวงกต 11 วงฝังอยู่บนพื้นโบสถ์",
+      "ขึ้นชื่อเรื่องกระจกสีน้ำเงินในตำนาน และผ้าคลุมของพระแม่มารี",
+      "อยู่ในฝรั่งเศส ห่างปารีสไปทางตะวันตกเฉียงใต้ราว 80 กม.",
+      "มหาวิหารกอทิกที่มียอดแหลมสองยอดไม่เหมือนกัน" ] },
+    en: { place: "Chartres Cathedral, France", clues: [
+      "A labyrinth where no one ever gets lost",
+      "An 11-circuit maze set into the floor",
+      "Famous for its legendary blue glass and the Virgin's veil",
+      "In France, about 80 km southwest of Paris",
+      "A Gothic cathedral with two mismatched spires" ] } },
+  { lat: 41.9047, lon: 12.4944,
+    th: { place: "โบสถ์ซานตามาเรียเดลลาวิตตอเรีย โรม", clues: [
+      "ไฟที่ทิ่มแทงหัวใจด้วยลูกศรทองคำ",
+      "รูปสลักหินอ่อนนักบุญหญิงกับเทวดาถือลูกศร",
+      "ผลงาน 'ความปีติของนักบุญเทเรซา' ของเบอร์นินี",
+      "อยู่ในกรุงโรม ไม่ไกลจากสถานีรถไฟเทอร์มินี",
+      "โบสถ์ที่ชื่อแปลว่า 'พระแม่แห่งชัยชนะ'" ] },
+    en: { place: "Santa Maria della Vittoria, Rome", clues: [
+      "Fire that pierces the heart with a golden arrow",
+      "A marble saint and an angel holding a spear",
+      "Bernini's 'Ecstasy of Saint Teresa'",
+      "In Rome, not far from Termini station",
+      "A church whose name means 'Our Lady of Victory'" ] } },
+  { lat: 38.9137, lon: -77.0364,
+    th: { place: "บ้านแห่งวิหาร (House of the Temple) วอชิงตัน ดี.ซี.", clues: [
+      "วิหารที่ลอกแบบสุสานแห่งฮาลิคาร์นัสซัส หนึ่งในเจ็ดสิ่งมหัศจรรย์",
+      "สฟิงซ์สองตัวเฝ้าบันไดทางขึ้น",
+      "สำนักงานใหญ่ของฟรีเมสันสายสกอตติชไรต์",
+      "อยู่ในเมืองหลวงของสหรัฐอเมริกา บนถนนสายที่ 16",
+      "ชื่ออาคารแปลว่า 'บ้านแห่งวิหาร'" ] },
+    en: { place: "House of the Temple, Washington, D.C.", clues: [
+      "A temple modelled on the Mausoleum at Halicarnassus, an ancient Wonder",
+      "Two sphinxes guard the stairs",
+      "Headquarters of Scottish Rite Freemasonry",
+      "In the U.S. capital, on 16th Street",
+      "Its name is literally 'House of the Temple'" ] } },
+  { lat: 45.4345, lon: 12.3397,
+    th: { place: "มหาวิหารซานมาร์โก เวนิส", clues: [
+      "ม้าสี่ตัวที่ถูกปล้นมา ชี้ทางไปหาผู้ทรยศ",
+      "ม้าทองสัมฤทธิ์สี่ตัวเหนือประตูทางเข้า",
+      "ดอจเอนริโก ดันโดโล นำของเหล่านี้กลับมาจากสงครามครูเสดครั้งที่ 4",
+      "อยู่ในเมืองที่ใช้เรือแทนรถ ประเทศอิตาลี",
+      "มหาวิหารทองคำหน้าจัตุรัสที่มีนกพิราบเต็มไปหมด" ] },
+    en: { place: "St Mark's Basilica, Venice", clues: [
+      "Four stolen horses point the way to a traitor",
+      "Four bronze horses above the entrance",
+      "Doge Enrico Dandolo brought them home from the Fourth Crusade",
+      "In the Italian city where boats replace cars",
+      "The golden basilica on a square full of pigeons" ] } },
+  { lat: 48.6361, lon: -1.5115,
+    th: { place: "มง-แซ็ง-มีแชล ฝรั่งเศส", clues: [
+      "ภูเขาของเทวดา ที่กลายเป็นเกาะทุกครั้งที่น้ำขึ้น",
+      "รูปปั้นทองของเทวดามีคาเอลบนยอดแหลม",
+      "อารามเบเนดิกตินจากยุคกลาง เคยใช้เป็นคุกด้วย",
+      "อยู่ในแคว้นนอร์ม็องดี ประเทศฝรั่งเศส",
+      "อารามบนเกาะหินกลางอ่าวที่น้ำขึ้นลงแรงที่สุดในยุโรป" ] },
+    en: { place: "Mont-Saint-Michel, France", clues: [
+      "The angel's mount, which becomes an island at every high tide",
+      "A golden statue of the archangel Michael on the spire",
+      "A medieval Benedictine abbey that once served as a prison",
+      "In Normandy, France",
+      "An abbey on a rocky island in a bay with Europe's strongest tides" ] } },
+  { lat: 48.8510, lon: 2.3348,
+    th: { place: "โบสถ์แซ็ง-ซุลปิซ ปารีส", clues: [
+      "เส้นทองเหลืองบนพื้นวิ่งไปหาเสาหิน แต่ที่นี่ไม่ใช่เส้นกุหลาบ",
+      "นาฬิกาแดดดาราศาสตร์อยู่ในโบสถ์",
+      "ผู้แสวงหาทุบพื้นแล้วพบแค่ข้อความจากหนังสือโยบ 38:11",
+      "อยู่ในปารีส ฝั่งซ้ายของแม่น้ำแซน",
+      "หน้าโบสถ์มีน้ำพุรูปบิชอปสี่องค์" ] },
+    en: { place: "Saint-Sulpice Church, Paris", clues: [
+      "A brass line on the floor runs to a stone obelisk, but it is not the Rose Line",
+      "An astronomical sundial inside a church",
+      "A seeker smashed the floor and found only Job 38:11",
+      "In Paris, on the Left Bank",
+      "A fountain of four bishops stands in front" ] } },
+  { lat: 41.0084, lon: 28.9779,
+    th: { place: "อ่างเก็บน้ำใต้ดินเยเรบาตัน อิสตันบูล", clues: [
+      "ในวังที่จมอยู่ใต้น้ำ หัวของเมดูซ่าวางกลับหัว",
+      "เสาหิน 336 ต้นยืนอยู่ในน้ำ",
+      "สร้างเป็นที่เก็บน้ำในสมัยจักรพรรดิจัสติเนียน",
+      "อยู่ในเมืองที่ตั้งคร่อมสองทวีป",
+      "อยู่ใต้ดิน ห่างฮาเกียโซเฟียเพียงไม่กี่ร้อยเมตร" ] },
+    en: { place: "Basilica Cistern, Istanbul", clues: [
+      "In a sunken palace, Medusa's head lies upside down",
+      "336 columns stand in water",
+      "Built as a water store under Emperor Justinian",
+      "In the city that spans two continents",
+      "Underground, a few hundred metres from Hagia Sophia" ] } },
+  { lat: 41.5933, lon: 1.8375,
+    th: { place: "อารามมอนต์เซอร์รัต สเปน", clues: [
+      "อารามที่ซ่อนอยู่บนภูเขารูปฟันเลื่อย",
+      "พระแม่มารีผิวดำ",
+      "อารามเบเนดิกติน มีคณะนักร้องประสานเสียงเด็กที่เก่าแก่ที่สุดแห่งหนึ่งของยุโรป",
+      "อยู่ในแคว้นกาตาลุญญา ห่างบาร์เซโลนาราว 50 กม.",
+      "ชื่อภูเขาแปลว่า 'ภูเขาฟันเลื่อย'" ] },
+    en: { place: "Montserrat Monastery, Spain", clues: [
+      "A monastery hidden on a saw-toothed mountain",
+      "A Black Madonna",
+      "A Benedictine abbey with one of Europe's oldest boys' choirs",
+      "In Catalonia, about 50 km from Barcelona",
+      "The mountain's name means 'serrated mountain'" ] } },
+  { lat: 41.8989, lon: 12.4731,
+    th: { place: "น้ำพุสี่สายน้ำ จัตุรัสนาโวนา โรม", clues: [
+      "น้ำจากสี่ทวีปไหลมาบรรจบใต้นกพิราบ",
+      "เสาโอเบลิสก์บนยอดน้ำพุ มีนกพิราบเกาะอยู่บนสุด",
+      "เบอร์นินีสร้างเมื่อปี 1651 แทนแม่น้ำไนล์ คงคา ดานูบ และริโอเดลาปลาตา",
+      "อยู่ในกรุงโรม บนลานที่เคยเป็นสนามกีฬาโบราณ",
+      "จัตุรัสนาโวนา" ] },
+    en: { place: "Fountain of the Four Rivers, Piazza Navona, Rome", clues: [
+      "Water from four continents meets beneath a dove",
+      "An obelisk tops the fountain, with a dove at the very top",
+      "Bernini, 1651: the Nile, Ganges, Danube and Río de la Plata",
+      "In Rome, on the site of an ancient stadium",
+      "Piazza Navona" ] } },
+  { lat: 42.9277, lon: 2.2630,
+    th: { place: "แรน-เลอ-ชาโต ฝรั่งเศส", clues: [
+      "ปีศาจแบกอ่างน้ำมนต์อยู่ที่ประตูโบสถ์",
+      "หอคอยเล็กๆ ที่ตั้งชื่อตามแมรี มักดาเลนา",
+      "บาทหลวงเบเรนเจอร์ โซนีแยร์ ร่ำรวยขึ้นมาอย่างลึกลับ",
+      "อยู่ในแคว้นอ็อกซีตานี ทางใต้ของฝรั่งเศส",
+      "หมู่บ้านบนเนินเขาที่เป็นศูนย์กลางตำนานจอกศักดิ์สิทธิ์" ] },
+    en: { place: "Rennes-le-Château, France", clues: [
+      "A demon holds up the holy-water stoup at the church door",
+      "A small tower named after Mary Magdalene",
+      "The priest Bérenger Saunière grew mysteriously rich",
+      "In Occitanie, southern France",
+      "A hilltop village at the heart of Holy Grail legends" ] } },
+  { lat: 51.5133, lon: -0.1102,
+    th: { place: "เทมเปิลเชิร์ช ลอนดอน", clues: [
+      "อัศวินนอนอยู่บนพื้นหิน แต่ไม่มีใครถูกฝังใต้ร่างพวกเขา",
+      "โบสถ์ทรงกลมที่เลียนแบบโบสถ์พระคูหาศักดิ์สิทธิ์ในเยรูซาเลม",
+      "อัศวินเทมพลาร์สร้าง และทำพิธีเปิดเมื่อปี 1185",
+      "อยู่ในลอนดอน ย่านของนักกฎหมาย",
+      "ชื่อโบสถ์มาจากอัศวินผู้สร้าง" ] },
+    en: { place: "Temple Church, London", clues: [
+      "Knights lie on the stone floor, yet no one is buried beneath them",
+      "A round church modelled on the Holy Sepulchre in Jerusalem",
+      "Built by the Knights Templar and consecrated in 1185",
+      "In London, in the lawyers' quarter",
+      "Named after the knights who built it" ] } }
+];
+
+
+const ROMAN = ["I", "II", "III", "IV", "V"];
+const T = {
+  th: {
+    brand: "พิกัดลับ", help: "วิธีเล่น", confirm: "ยืนยันหมุด", daily: "แฟ้มปริศนาประจำวัน", question: "รหัสนี้ชี้ไปที่ใด?",
+    brief: "ถอดความหมายของคำใบ้ แล้วปักหมุดให้ตรงสถานที่ประวัติศาสตร์ที่ซ่อนอยู่", yourPins: "หมุดของคุณ",
+    km: "กม.", lgHit: "≤ 5 กม. ไขได้!", lgCold: "ไกลกว่านั้น", visits: "จำนวนครั้งที่เปิดเกม", gotIt: "เริ่มไขปริศนา",
+    thaiLink: "เล่นเวอร์ชันสถานที่ในไทย", helpTitle: "วิธีเล่นพิกัดลับ",
+    helpItems: [
+      "ทุกเที่ยงคืน (เวลาไทย) จะมีแฟ้มปริศนาใหม่ ทุกคนได้ข้อเดียวกัน",
+      "คำใบ้ข้อ I เป็นรหัสลึกลับ ข้อต่อๆ ไปจะชัดขึ้นเรื่อยๆ: สัญลักษณ์ บุคคล ภูมิภาค และเบาะแสสุดท้าย",
+      "ปักหมุดได้ 5 ครั้ง พลาดแต่ละครั้งจะเปิดคำใบ้ข้อถัดไป พร้อมบอกระยะทางและทิศ",
+      "ปักห่างจากสถานที่จริงไม่เกิน 5 กม. ถือว่าไขได้",
+      "เล่นจบแล้วคัดลอกผลไปแปะในกลุ่ม ใครใช้หมุดน้อยกว่าชนะ ถ้าเท่ากัน ใครปักใกล้กว่าชนะ" ],
+    caseNo: (n, d) => `แฟ้ม #${n} · ${d.getUTCDate()} ${["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][d.getUTCMonth()]} ${d.getUTCFullYear() + 543}`,
+    practice: n => `ลองเล่นแฟ้ม #${n}`,
+    tapPrompt: (i, n) => `หมุดที่ ${i} จาก ${n}: แตะแผนที่เพื่อเลือกจุด`,
+    doneToday: "ปิดแฟ้มนี้แล้ว", locked: i => `ปิดผนึก: เปิดเมื่อหมุดที่ ${i} พลาด`,
+    looking: "กำลังระบุตำแหน่ง…", sea: "กลางทะเล / ไม่ทราบชื่อ",
+    solvedEb: "ไขปริศนาสำเร็จ", missedEb: "ปริศนายังไม่คลี่คลาย",
+    solvedH: (n, d) => `ไขได้ใน ${n} หมุด ห่าง ${d} กม.`, missedH: d => `ใกล้ที่สุด ${d} กม.`,
+    answer: p => `คำตอบ: ${p}`, copy: "คัดลอกผลไปแชร์", copied: "คัดลอกแล้ว", selectCopy: "เลือกข้อความแล้ว กดคัดลอก",
+    gmaps: "ดูใน Google Maps", nextIn: t => `แฟ้มถัดไปใน ${t}`, found: "ไขได้", toward: "ทิศไปยังคำตอบ"
+  },
+  en: {
+    brand: "Secret Spot", help: "How to play", confirm: "Drop pin", daily: "Today's case file", question: "Where does the code point?",
+    brief: "Decode the clues, then pin the hidden historic place as precisely as you can.", yourPins: "Your pins",
+    km: "km", lgHit: "≤ 5 km solved!", lgCold: "further", visits: "Game opened", gotIt: "Start decoding",
+    thaiLink: "Play the Thailand edition", helpTitle: "How to play Secret Spot",
+    helpItems: [
+      "A new case file every midnight (Thailand time). Everyone gets the same one.",
+      "Clue I is cryptic. The rest get clearer: a symbol, a person, the region, a final lead.",
+      "You have 5 pins. Each miss unseals the next clue and shows distance and direction.",
+      "Within 5 km of the real place counts as solved.",
+      "Copy your result to your group chat. Fewer pins wins; on a tie, the closer pin wins." ],
+    caseNo: (n, d) => `File #${n} · ${d.getUTCDate()} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()]} ${d.getUTCFullYear()}`,
+    practice: n => `Practice file #${n}`,
+    tapPrompt: (i, n) => `Pin ${i} of ${n}: tap the map to choose a spot`,
+    doneToday: "Case closed", locked: i => `Sealed: opens if pin ${i} misses`,
+    looking: "Locating…", sea: "At sea / unnamed",
+    solvedEb: "Case solved", missedEb: "Case unsolved",
+    solvedH: (n, d) => `Solved in ${n} ${n === 1 ? "pin" : "pins"}, ${d} km away`, missedH: d => `Closest pin: ${d} km`,
+    answer: p => `Answer: ${p}`, copy: "Copy result", copied: "Copied", selectCopy: "Text selected, copy it",
+    gmaps: "Open in Google Maps", nextIn: t => `Next file in ${t}`, found: "solved", toward: "direction to the answer"
+  }
+};
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let LANG = (() => { try { const v = localStorage.getItem("pikadlap:lang"); if (v === "th" || v === "en") return v; } catch (e) {} return /^th\b/i.test(navigator.language || "th") ? "th" : "en"; })();
+const t = k => T[LANG][k];
+
+function applyStatic() {
+  document.documentElement.lang = LANG;
+  document.title = LANG === "en" ? "Secret Spot · พิกัดลับ" : "พิกัดลับ · Secret Spot";
+  document.querySelectorAll("[data-t]").forEach(el => { const v = t(el.dataset.t); if (typeof v === "string") el.textContent = v; });
+  document.querySelectorAll(".lang button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.lang === LANG)));
+  $("helpList").replaceChildren(...t("helpItems").map(s => { const li = document.createElement("li"); li.textContent = s; return li; }));
+}
+document.querySelectorAll(".lang button").forEach(b => b.onclick = () => {
+  LANG = b.dataset.lang;
+  try { localStorage.setItem("pikadlap:lang", LANG); } catch (e) {}
+  applyStatic(); setCaseNo(); renderAll();
+});
+
+// ---------- day / case ----------
+const MAX_GUESSES = 5, HIT_KM = 5;
+const DAY = 86400000, TZ = 7 * 3600000, EPOCH = Date.UTC(2026, 9, 20);
+// A link ending in #N (e.g. index.html#2) opens file N as practice instead of today's.
+const PRACTICE = (() => { const m = location.hash.match(/^#(\d+)$/); return m && +m[1] >= 1 ? +m[1] - 1 : null; })();
+window.addEventListener("hashchange", () => location.reload());
+let dayIdx, dateKey, CASE;
+function setupDay() {
+  dayIdx = PRACTICE !== null ? PRACTICE : Math.max(0, Math.floor((Date.now() + TZ - EPOCH) / DAY));
+  dateKey = new Date(EPOCH + dayIdx * DAY).toISOString().slice(0, 10);
+  CASE = CASES[dayIdx % CASES.length];
+  setCaseNo();
+}
+function setCaseNo() { $("caseno").textContent = PRACTICE !== null ? t("practice")(dayIdx + 1) : t("caseNo")(dayIdx + 1, new Date(EPOCH + dayIdx * DAY)); }
+const caseText = () => CASE[LANG];
+
+// ---------- geo ----------
+function km(a, b) {
+  const R = 6371, r = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * r, dLon = (b.lon - a.lon) * r;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function bearing(a, b) {
+  const r = Math.PI / 180;
+  const y = Math.sin((b.lon - a.lon) * r) * Math.cos(b.lat * r);
+  const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lon - a.lon) * r);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+const tier = d => d <= HIT_KM ? "hit" : d <= 50 ? "warm" : d <= 500 ? "mid" : "cold";
+const TIER_EMOJI = { hit: "🟩", warm: "🟨", mid: "🟧", cold: "🟥" };
+const ARROWS = ["⬆️", "↗️", "➡️", "↘️", "⬇️", "↙️", "⬅️", "↖️"];
+const fmtKm = d => d < 10 ? d.toFixed(1) : Math.round(d).toLocaleString(LANG === "en" ? "en-US" : "th-TH");
+
+// Place names for confirmed pins via OpenStreetMap Nominatim (one request per pin, cached per language).
+const placeCache = (() => { try { return JSON.parse(localStorage.getItem("pikadlap:places") || "{}"); } catch (e) { return {}; } })();
+const pendingLookups = new Set();
+const placeKey = (g, lang) => `${g[0].toFixed(3)},${g[1].toFixed(3)},${lang}`;
+function placeName(g) {
+  const key = placeKey(g, LANG);
+  if (key in placeCache) return placeCache[key] || t("sea");
+  if (!pendingLookups.has(key)) {
+    pendingLookups.add(key);
+    fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&lat=${g[0]}&lon=${g[1]}&accept-language=${LANG}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        const a = j && j.address;
+        placeCache[key] = a ? [a.city || a.town || a.village || a.county || a.state, a.country].filter(Boolean).join(", ") : "";
+        try { localStorage.setItem("pikadlap:places", JSON.stringify(placeCache)); } catch (e) {}
+        renderRows();
+      })
+      .catch(() => { placeCache[key] = `${g[0].toFixed(2)}, ${g[1].toFixed(2)}`; renderRows(); });
+  }
+  return t("looking");
+}
+
+// ---------- map ----------
+const map = L.map("map", { zoomControl: true, minZoom: 2, maxZoom: 18, worldCopyJump: true }).setView([35, 15], 2);
+// Esri National Geographic style basemap (no key), with Esri World Street Map for close zoom.
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 12, attribution: "Tiles &copy; Esri, National Geographic"
+}).addTo(map);
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+  minZoom: 13, maxZoom: 19, maxNativeZoom: 18, attribution: "&copy; Esri"
+}).addTo(map);
+const layer = L.layerGroup().addTo(map);
+function pinIcon(color, label, star) {
+  const html = star
+    ? `<svg width="36" height="36" viewBox="-18 -18 36 36"><circle r="15" fill="none" stroke="${color}" stroke-width="2"/><path d="M0 -11 L9.5 5.5 H-9.5 Z" fill="${color}"/><path d="M0 11 L-9.5 -5.5 H9.5 Z" fill="none" stroke="${color}" stroke-width="1.6"/></svg>`
+    : `<svg width="28" height="36" viewBox="-14 -34 28 36"><path d="M0 0 C-2 -9 -12 -13 -12 -21 a12 12 0 0 1 24 0 c0 8 -10 12 -12 21Z" fill="${color}" stroke="#100e0b" stroke-width="1.5"/>${label ? `<text y="-17" text-anchor="middle" font-family="Cinzel, Georgia, serif" font-size="11" font-weight="700" fill="#fff">${label}</text>` : ""}</svg>`;
+  return L.divIcon({ className: "pin", html, iconSize: star ? [36, 36] : [28, 36], iconAnchor: star ? [18, 18] : [14, 34] });
+}
+
+// ---------- state ----------
+let state = { g: [], done: false, solved: false };
+let pending = null, justRevealed = -1;
+const LS = () => "pikadlap:world:v1:" + dateKey;
+function loadLocal() { try { const v = JSON.parse(localStorage.getItem(LS()) || "null"); if (v && Array.isArray(v.g)) return v; } catch (e) {} return null; }
+function saveLocal() { try { localStorage.setItem(LS(), JSON.stringify(state)); } catch (e) {} }
+const target = () => ({ lat: CASE.lat, lon: CASE.lon });
+const guessKm = g => km({ lat: g[0], lon: g[1] }, target());
+const bestKm = st => Math.min(...st.g.map(guessKm));
+
+// ---------- counters (hits.sh, no sign-up) ----------
+const COUNTER = "https://hits.sh/rmustang0086-hash.github.io/pikadlap";
+$("visitBadge").src = `${COUNTER}.svg?label=visits&color=8a7034`;
+function countFinish() {
+  // One count per device per daily file; practice games are not counted.
+  if (PRACTICE !== null) return;
+  const key = "pikadlap:counted:world:" + dateKey;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+  new Image().src = `${COUNTER}/finished.svg`;
+  new Image().src = `${COUNTER}/finished-${dateKey}.svg`;
+}
+
+map.on("click", e => {
+  if (state.done) return;
+  const ll = e.latlng.wrap();
+  pending = [+ll.lat.toFixed(5), +ll.lng.toFixed(5)];
+  renderPending(); renderPins();
+});
+function renderPending() {
+  const ro = $("readout"), btn = $("confirm");
+  if (state.done) { ro.textContent = t("doneToday"); btn.hidden = true; return; }
+  btn.hidden = false;
+  if (!pending) { ro.textContent = t("tapPrompt")(state.g.length + 1, MAX_GUESSES); btn.disabled = true; return; }
+  ro.replaceChildren();
+  const m = document.createElement("span"); m.className = "mono";
+  m.textContent = `${Math.abs(pending[0]).toFixed(4)}°${pending[0] >= 0 ? "N" : "S"}  ${Math.abs(pending[1]).toFixed(4)}°${pending[1] >= 0 ? "E" : "W"}`;
+  ro.append(m); btn.disabled = false;
+}
+$("confirm").onclick = () => {
+  if (!pending || state.done) return;
+  state.g.push(pending); pending = null;
+  const d = guessKm(state.g[state.g.length - 1]);
+  if (d <= HIT_KM) { state.solved = true; state.done = true; }
+  else if (state.g.length >= MAX_GUESSES) state.done = true;
+  if (!state.done) justRevealed = state.g.length;
+  saveLocal(); renderAll();
+  if (state.done) { fitResult(); countFinish(); }
+};
+function fitResult() { map.fitBounds(L.latLngBounds([...state.g, [CASE.lat, CASE.lon]]).pad(0.25), { maxZoom: 13 }); }
+
+// ---------- rendering ----------
+function renderPins() {
+  layer.clearLayers();
+  if (state.done) {
+    for (const g of state.g) L.polyline([g, [CASE.lat, CASE.lon]], { color: css("--gold"), weight: 1.5, dashArray: "4 6", opacity: .8 }).addTo(layer);
+    L.circle([CASE.lat, CASE.lon], { radius: HIT_KM * 1000, color: css("--gold"), weight: 1.5, fillOpacity: .12 }).addTo(layer);
+  }
+  state.g.forEach((g, i) => L.marker(g, { icon: pinIcon(css("--" + tier(guessKm(g))), ROMAN[i]), interactive: false }).addTo(layer));
+  if (pending) L.marker(pending, { icon: pinIcon(css("--wax"), ROMAN[state.g.length]), interactive: false }).addTo(layer);
+  if (state.done) L.marker([CASE.lat, CASE.lon], { icon: pinIcon(css("--gold"), "", true), interactive: false, zIndexOffset: 1000 }).addTo(layer);
+}
+function renderClues() {
+  const open = state.done ? 5 : Math.min(5, state.g.length + 1);
+  const ol = $("clues"); ol.replaceChildren();
+  caseText().clues.forEach((text, i) => {
+    const li = document.createElement("li");
+    li.className = "clue" + (i < open ? "" : " locked") + (i === justRevealed ? " new" : "");
+    const n = document.createElement("span"); n.className = "n"; n.textContent = ROMAN[i];
+    const p = document.createElement("p"); p.className = "txt";
+    p.textContent = i < open ? (i === 0 ? `“${text}”` : text) : t("locked")(ROMAN[i - 1]);
+    li.append(n, p); ol.appendChild(li);
+  });
+  justRevealed = -1;
+}
+function renderRows() {
+  const box = $("rows"); box.replaceChildren();
+  $("tries").textContent = `· ${state.g.length}/${MAX_GUESSES}`;
+  for (let i = 0; i < MAX_GUESSES; i++) {
+    const row = document.createElement("div"); row.className = "row";
+    const idx = document.createElement("span"); idx.className = "i"; idx.textContent = ROMAN[i];
+    const place = document.createElement("span"); place.className = "place";
+    const kmEl = document.createElement("span"); kmEl.className = "km";
+    const dir = document.createElement("span"); dir.className = "dir";
+    const g = state.g[i];
+    if (g) {
+      const d = guessKm(g), tr = tier(d);
+      row.classList.add("filled");
+      place.textContent = placeName(g);
+      kmEl.textContent = fmtKm(d) + " " + t("km");
+      dir.classList.add("t-" + tr);
+      dir.innerHTML = tr === "hit"
+        ? `<svg width="16" height="16" viewBox="0 0 16 16" aria-label="${t("found")}"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+        : `<svg width="16" height="16" viewBox="0 0 16 16" style="transform:rotate(${bearing({ lat: g[0], lon: g[1] }, target())}deg)" aria-label="${t("toward")}"><path d="M8 2l5 7H9.5v5h-3V9H3z" fill="currentColor"/></svg>`;
+    }
+    row.append(idx, place, kmEl, dir); box.appendChild(row);
+  }
+}
+function shareText() {
+  const lines = state.g.map(g => { const d = guessKm(g), tr = tier(d); return TIER_EMOJI[tr] + (tr === "hit" ? "📍" : ARROWS[Math.round(bearing({ lat: g[0], lon: g[1] }, target()) / 45) % 8]) + " " + fmtKm(d) + " " + t("km"); });
+  return `${t("brand")} #${dayIdx + 1} ${state.solved ? state.g.length : "X"}/${MAX_GUESSES}\n` + lines.join("\n") + (location.protocol.startsWith("http") ? "\n" + location.href.split("#")[0] : "");
+}
+function renderResult() {
+  const card = $("resultCard");
+  if (!state.done) { card.hidden = true; return; }
+  card.hidden = false; card.replaceChildren();
+  const eb = document.createElement("div"); eb.className = "eyebrow"; eb.textContent = state.solved ? t("solvedEb") : t("missedEb");
+  const h = document.createElement("h2");
+  h.textContent = state.solved ? t("solvedH")(state.g.length, fmtKm(bestKm(state))) : t("missedH")(fmtKm(bestKm(state)));
+  const p = document.createElement("p"); p.textContent = t("answer")(caseText().place);
+  const pre = document.createElement("div"); pre.className = "share"; pre.textContent = shareText();
+  const acts = document.createElement("div"); acts.className = "actions";
+  const copy = document.createElement("button"); copy.className = "btn"; copy.type = "button"; copy.textContent = t("copy");
+  copy.onclick = async () => {
+    try { await navigator.clipboard.writeText(shareText()); copy.textContent = t("copied"); }
+    catch (e) { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = t("selectCopy"); }
+    setTimeout(() => copy.textContent = t("copy"), 2200);
+  };
+  const gm = document.createElement("a"); gm.className = "btn alt"; gm.target = "_blank"; gm.rel = "noopener";
+  gm.href = `https://www.google.com/maps/search/?api=1&query=${CASE.lat},${CASE.lon}`; gm.textContent = t("gmaps");
+  const nx = document.createElement("span"); nx.className = "next"; nx.id = "countdown";
+  acts.append(copy, gm, nx);
+  card.append(eb, h, p, pre, acts);
+  tick();
+}
+function tick() {
+  if (PRACTICE !== null) return;
+  const left = EPOCH + (dayIdx + 1) * DAY - TZ - Date.now();
+  if (left <= 0) { setupDay(); state = loadLocal() || { g: [], done: false, solved: false }; pending = null; map.setView([35, 15], 2); renderAll(); return; }
+  const el = $("countdown");
+  if (el) { const h = Math.floor(left / 3600000), m = Math.floor(left / 60000) % 60, s = Math.floor(left / 1000) % 60; el.textContent = t("nextIn")(`${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`); }
+}
+setInterval(tick, 1000);
+function renderAll() { renderPending(); renderClues(); renderRows(); renderResult(); renderPins(); }
+
+// ---------- boot ----------
+$("helpBtn").onclick = () => $("help").showModal();
+applyStatic();
+setupDay();
+state = loadLocal() || state;
+renderAll();
+if (state.done) fitResult();
+try { if (!state.g.length && !localStorage.getItem("pikadlap:seenHelpWorld")) { localStorage.setItem("pikadlap:seenHelpWorld", "1"); $("help").showModal(); } } catch (e) {}
+</script>
+</body>
+</html>
