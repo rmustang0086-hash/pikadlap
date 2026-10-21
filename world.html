@@ -98,6 +98,15 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--gold); outline-
 .btn { background: var(--gold); color: #1a1408; border: 0; border-radius: 6px; padding: 9px 14px; cursor: pointer; font-weight: 500; text-decoration: none; display: inline-block; }
 .btn.alt { background: none; color: var(--ink); border: 1px solid var(--line); }
 .next { font-size: 13px; color: var(--muted); }
+.wiki { margin: 14px 0 0; display: grid; gap: 8px; }
+.wiki img { width: 100%; max-height: 300px; object-fit: cover; border-radius: 8px; display: block; border: 1px solid var(--line); background: var(--bg); }
+.wiki figcaption { font-size: 14px; color: var(--muted); }
+.wiki figcaption b { color: var(--ink); }
+.wiki a { color: var(--gold); }
+.history { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 4px; }
+.history h3 { font-family: var(--font-display); font-size: 17px; margin: 0 0 6px; color: var(--gold); letter-spacing: .04em; }
+.history p { margin: 0 0 8px; max-width: 70ch; }
+#map.sat .leaflet-tile-pane { filter: none; }
 
 .foot { max-width: 1280px; margin: 18px auto 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .foot img { height: 20px; display: block; }
@@ -800,6 +809,7 @@ function renderResult() {
   const nx = document.createElement("span"); nx.className = "next"; nx.id = "countdown";
   acts.append(copy, gm, nx);
   card.append(eb, h, p, pre, acts);
+  revealExtras(card, CASE);
   tick();
 }
 function tick() {
@@ -811,6 +821,111 @@ function tick() {
 }
 setInterval(tick, 1000);
 function renderAll() { renderPending(); renderClues(); renderRows(); renderResult(); renderPins(); }
+
+// ---------- answer reveal: real photo + summary (Wikipedia), zoom to the spot, satellite view ----------
+const REVEAL_T = {
+  th: { zoomReal: "ซูมดูสถานที่จริง", sat: "ภาพดาวเทียม", mapView: "กลับเป็นแผนที่", wikiMore: "อ่านต่อใน Wikipedia", wikiLoading: "กำลังโหลดรูปสถานที่จริง…", history: "ประวัติ" },
+  en: { zoomReal: "Zoom to the real place", sat: "Satellite view", mapView: "Back to map", wikiMore: "Read more on Wikipedia", wikiLoading: "Loading a photo of the real place…", history: "History" }
+};
+const rt = k => REVEAL_T[LANG][k];
+let satLayer = null, satOn = false;
+function setSatellite(on) {
+  if (!satLayer) satLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", { maxZoom: 19, maxNativeZoom: 18, attribution: "Imagery &copy; Esri" });
+  satOn = on;
+  if (on) satLayer.addTo(map); else map.removeLayer(satLayer);
+  document.getElementById("map").classList.toggle("sat", on);
+}
+const wikiCache = {};
+function wikiSearch(lang, q) {
+  const k = lang + "|" + q;
+  if (!wikiCache[k]) {
+    const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&generator=search&gsrlimit=1&gsrsearch=${encodeURIComponent(q)}&prop=pageimages|extracts|info&inprop=url&piprop=thumbnail&pithumbsize=720&exintro=1&explaintext=1&exsentences=3`;
+    wikiCache[k] = fetch(url).then(r => r.json()).then(j => {
+      const ps = j && j.query && j.query.pages; if (!ps) return null;
+      const p = Object.values(ps)[0];
+      return { title: p.title, img: p.thumbnail && p.thumbnail.source, text: p.extract || "", url: p.fullurl };
+    }).catch(() => null);
+  }
+  return wikiCache[k];
+}
+async function wikiFor(c) {
+  const en = await wikiSearch("en", c.en.place);
+  if (en) en.lang = "en";
+  if (LANG === "en") return en;
+  const thPlace = c.wikiTh || (c.th ? c.th.place : c.place).replace(/(^|\s)[อจ]\./g, " ").trim();
+  const th = await wikiSearch("th", thPlace);
+  if (!th) return en;
+  return { title: th.title, lang: "th", img: th.img || (en && en.img), text: th.text || (en && en.text) || "", url: th.url };
+}
+// The article's History section (or its full intro when there is none), trimmed at a sentence end.
+const historyCache = {};
+function wikiHistory(lang, title) {
+  const k = lang + "|" + title;
+  if (!historyCache[k]) {
+    const url = `https://${lang}.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&explaintext=1&exsectionformat=wiki&redirects=1&titles=${encodeURIComponent(title)}`;
+    historyCache[k] = fetch(url).then(r => r.json()).then(j => {
+      const p = j && j.query && j.query.pages && Object.values(j.query.pages)[0];
+      const full = (p && p.extract) || "";
+      if (!full) return "";
+      const parts = full.split(/\n(={2,})\s*(.+?)\s*\1\n/);
+      // parts: [intro, "==", heading, text, "==", heading, text, ...]
+      let out = "";
+      for (let i = 1; i < parts.length; i += 3) {
+        if (/^(history|historical background|background|ประวัติ|ความเป็นมา|ประวัติความเป็นมา)/i.test(parts[i + 1])) {
+          const level = parts[i].length;
+          out = parts[i + 2];
+          for (let k2 = i + 3; k2 < parts.length && parts[k2].length > level; k2 += 3) out += "\n" + parts[k2 + 2];
+          break;
+        }
+      }
+      if (!out.trim()) out = parts[0];
+      out = out.replace(/\n{2,}/g, "\n").trim();
+      if (out.length > 1100) {
+        const cut = out.slice(0, 1100);
+        const end = Math.max(cut.lastIndexOf(". "), cut.lastIndexOf(".\n"), cut.lastIndexOf(" "), cut.lastIndexOf("\n"));
+        out = cut.slice(0, end > 600 ? end + 1 : 1100).trim() + " …";
+      }
+      return out;
+    }).catch(() => "");
+  }
+  return historyCache[k];
+}
+function revealExtras(card, c) {
+  const tools = document.createElement("div"); tools.className = "actions";
+  const zoomBtn = document.createElement("button"); zoomBtn.type = "button"; zoomBtn.className = "btn alt"; zoomBtn.textContent = rt("zoomReal");
+  zoomBtn.onclick = () => { setSatellite(true); satBtn.textContent = rt("mapView"); map.flyTo([c.lat, c.lon], 17); document.querySelector(".mapwrap").scrollIntoView({ behavior: "smooth", block: "center" }); };
+  const satBtn = document.createElement("button"); satBtn.type = "button"; satBtn.className = "btn alt"; satBtn.textContent = satOn ? rt("mapView") : rt("sat");
+  satBtn.onclick = () => { setSatellite(!satOn); satBtn.textContent = satOn ? rt("mapView") : rt("sat"); };
+  tools.append(zoomBtn, satBtn);
+  const box = document.createElement("figure"); box.className = "wiki";
+  const loading = document.createElement("figcaption"); loading.textContent = rt("wikiLoading");
+  box.append(loading);
+  card.append(tools, box);
+  const forLang = LANG;
+  wikiFor(c).then(w => {
+    if (!box.isConnected || forLang !== LANG) return;
+    box.replaceChildren();
+    if (!w) { box.remove(); return; }
+    if (w.img) { const img = document.createElement("img"); img.src = w.img; img.alt = w.title; img.loading = "lazy"; box.append(img); }
+    const cap = document.createElement("figcaption");
+    const h = document.createElement("b"); h.textContent = w.title;
+    const p = document.createElement("span"); p.textContent = w.text ? " " + w.text : "";
+    cap.append(h, p);
+    if (w.url && /^https:\/\/[a-z]+\.wikipedia\.org\//.test(w.url)) {
+      const a = document.createElement("a"); a.href = w.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = " " + rt("wikiMore");
+      cap.append(a);
+    }
+    box.append(cap);
+    wikiHistory(w.lang || "en", w.title).then(hist => {
+      if (!hist || !box.isConnected || forLang !== LANG) return;
+      const sec = document.createElement("section"); sec.className = "history";
+      const hh = document.createElement("h3"); hh.textContent = rt("history");
+      sec.append(hh);
+      hist.split("\n").forEach(line => { if (line.trim()) { const para = document.createElement("p"); para.textContent = line.trim(); sec.append(para); } });
+      box.append(sec);
+    });
+  });
+}
 
 // ---------- boot ----------
 $("helpBtn").onclick = () => $("help").showModal();
