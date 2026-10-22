@@ -162,6 +162,7 @@ dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--p
 dialog::backdrop { background: rgba(0, 0, 0, .45); }
 dialog h3 { font-family: var(--font-display); font-size: 21px; margin: 0 0 8px; }
 dialog ol { padding-left: 20px; margin: 0 0 12px; }
+dialog li.privacy { list-style: none; margin-left: -20px; margin-top: 8px; font-size: 13px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .clue.new { animation: none; } }
 </style>
 </head>
@@ -258,18 +259,18 @@ const CASES = [
     "It is in the lower northeast (Isan)",
     "The Sathon tree is this province's tree",
     "It is in front of Chumphon Gate in the city centre" ] } },
-  { place: "อนุสาวรีย์ท้าวเทพกระษัตรี ท้าวศรีสุนทร จ.ภูเก็ต", lat: 7.9519, lon: 98.3381, clues: [
+  { place: "อนุสาวรีย์ท้าวเทพกระษัตรี ท้าวศรีสุนทร จ.ภูเก็ต", lat: 7.9810, lon: 98.3639, clues: [
     "อยู่กลางวงเวียน",
     "เกี่ยวกับสองพี่น้องวีรสตรีที่ป้องกันเมืองถลางจากทัพพม่าเมื่อปี 2328",
     "อยู่ในภาคใต้ฝั่งอันดามัน",
     "จังหวัดนี้มีเฟื่องฟ้าเป็นดอกไม้ประจำจังหวัด",
-    "อยู่บนถนนเทพกระษัตรี ระหว่างตัวเมืองกับสนามบิน" ],
+    "อยู่บนเส้นทางหลักระหว่างตัวเมืองภูเก็ตกับสนามบิน ในอำเภอถลาง" ],
     en: { place: "Heroines Monument, Thalang, Phuket", clues: [
     "It stands in the middle of a roundabout",
     "It honours two sisters who defended Thalang from a Burmese army in 1785",
     "It is in the south, on the Andaman side",
     "Bougainvillea is this province's flower",
-    "It is on Thepkrasattri Road, between the town and the airport" ] } },
+    "It is on the main road between Phuket Town and the airport, in Thalang district" ] } },
   { place: "พระบรมราชานุสาวรีย์สมเด็จพระเจ้าตากสิน วงเวียนใหญ่ กรุงเทพฯ", lat: 13.7267, lon: 100.4935, clues: [
     "อยู่กลางวงเวียนที่รถติดมาก",
     "เกี่ยวกับกษัตริย์ผู้กู้เอกราชหลังเสียกรุงศรีอยุธยาครั้งที่ 2",
@@ -294,7 +295,7 @@ const CASES = [
     "It is in central Thailand",
     "This province is famous for luk thung music and the Banharn-Jamsai Tower",
     "A memorial ceremony and fair are held here every 18 January" ] } },
-  { place: "อนุสาวรีย์พระยาพิชัยดาบหัก จ.อุตรดิตถ์", lat: 17.6215, lon: 100.0985, clues: [
+  { place: "อนุสาวรีย์พระยาพิชัยดาบหัก จ.อุตรดิตถ์", lat: 17.6299, lon: 100.0973, clues: [
     "อยู่ในตัวเมืองใกล้แม่น้ำน่าน",
     "เกี่ยวกับทหารเอกของพระเจ้าตากที่สู้จนดาบหักคามือ",
     "อยู่ในภาคเหนือตอนล่าง",
@@ -744,7 +745,7 @@ $("confirm").onclick = () => {
   else if (state.g.length >= MAX_GUESSES) state.done = true;
   if (!state.done) justRevealed = state.g.length;
   saveLocal(); renderAll();
-  if (state.done) { fitResult(); countFinish(); scrollToResult(); }
+  if (state.done) { fitResult(); countFinish(); sendResult(); scrollToResult(); }
 };
 function fitResult() { map.fitBounds(L.latLngBounds([...state.g, [CASE.lat, CASE.lon]]).pad(0.25), { maxZoom: 13 }); }
 
@@ -1048,6 +1049,42 @@ function scrollToResult() {
   setTimeout(() => { const c = document.getElementById("resultCard"); if (c && !c.hidden) c.scrollIntoView({ behavior: "smooth", block: "start" }); }, 700);
 }
 
+// ---------- anonymous play data for testing (Google Sheet via Apps Script) ----------
+const RESULTS_URL = "https://script.google.com/macros/s/AKfycbzzfkOnhgbwSgHddrvZ286gMrGv-RoBxYcIPE8hZWjf0y8s32OpezgJORBbGU01kKLHIQ/exec";
+const EDITION = typeof ROMAN !== "undefined" ? "world" : "thai";
+const PRIVACY_T = {
+  th: "เกมเก็บผลการเล่นแบบไม่ระบุตัวตน (ข้อที่เล่น จำนวนหมุด ระยะ และเวลา) เพื่อนำไปปรับปรุงเกม",
+  en: "The game records anonymous play results (riddle, pins, distance and time) to help improve it."
+};
+function playerId() {
+  try {
+    let id = localStorage.getItem("pikadlap:player");
+    if (!id) { id = Math.random().toString(36).slice(2, 10); localStorage.setItem("pikadlap:player", id); }
+    return id;
+  } catch (e) { return "anon"; }
+}
+// the clock starts at the first tap on the map for today's riddle
+map.on("click", () => { if (!state.done && !state.t0) { state.t0 = Date.now(); saveLocal(); } });
+function sendResult() {
+  if (PRACTICE !== null || !RESULTS_URL) return;
+  const key = `pikadlap:sent:${EDITION}:${dateKey}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+  const body = {
+    edition: EDITION, day: dateKey, file: dayIdx + 1, solved: !!state.solved, pins: state.g.length,
+    bestKm: Math.round(bestKm(state) * 10) / 10,
+    seconds: state.t0 ? Math.round((Date.now() - state.t0) / 1000) : "",
+    device: /Line\//i.test(navigator.userAgent) ? "line" : (matchMedia("(max-width: 899px)").matches ? "mobile" : "desktop"),
+    player: playerId(), lang: LANG
+  };
+  try { fetch(RESULTS_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) }).catch(() => {}); } catch (e) {}
+}
+// add the privacy line to the How-to-play list in whichever language is shown
+const applyStaticBase = applyStatic;
+applyStatic = function () {
+  applyStaticBase();
+  const li = document.createElement("li"); li.className = "privacy"; li.textContent = PRIVACY_T[LANG];
+  document.getElementById("helpList").append(li);
+};
 // ---------- boot ----------
 $("helpBtn").onclick = () => $("help").showModal();
 applyStatic();

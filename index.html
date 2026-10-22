@@ -166,6 +166,7 @@ dialog { border: 1px solid var(--gold-dim); border-radius: 10px; background: var
 dialog::backdrop { background: rgba(0, 0, 0, .6); }
 dialog h3 { font-family: var(--font-display); font-size: 21px; margin: 0 0 8px; color: var(--gold); }
 dialog ol { padding-left: 20px; margin: 0 0 12px; }
+dialog li.privacy { list-style: none; margin-left: -20px; margin-top: 8px; font-size: 13px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .clue.new { animation: none; } }
 </style>
 </head>
@@ -488,13 +489,13 @@ const CASES = [
       "สฟิงซ์สองตัวเฝ้าบันไดทางขึ้น",
       "สำนักงานใหญ่ของฟรีเมสันสายสกอตติชไรต์",
       "อยู่ในเมืองหลวงของสหรัฐอเมริกา บนถนนสายที่ 16",
-      "ชื่ออาคารแปลว่า 'บ้านแห่งวิหาร'" ] },
+      "อยู่ห่างทำเนียบขาวขึ้นไปทางเหนือราว 2 กม. ตามถนนสายที่ 16" ] },
     en: { place: "House of the Temple, Washington, D.C.", clues: [
       "A temple modelled on the Mausoleum at Halicarnassus, an ancient Wonder",
       "Two sphinxes guard the stairs",
       "Headquarters of Scottish Rite Freemasonry",
       "In the U.S. capital, on 16th Street",
-      "Its name is literally 'House of the Temple'" ] } },
+      "About 2 km due north of the White House, up 16th Street" ] } },
   { lat: 45.4345, lon: 12.3397,
     th: { place: "มหาวิหารซานมาร์โก เวนิส", clues: [
       "ม้าสี่ตัวที่ถูกปล้นมา ชี้ทางไปหาผู้ทรยศ",
@@ -566,13 +567,13 @@ const CASES = [
       "เสาโอเบลิสก์บนยอดน้ำพุ มีนกพิราบเกาะอยู่บนสุด",
       "เบอร์นินีสร้างเมื่อปี 1651 แทนแม่น้ำไนล์ คงคา ดานูบ และริโอเดลาปลาตา",
       "อยู่ในกรุงโรม บนลานที่เคยเป็นสนามกีฬาโบราณ",
-      "จัตุรัสนาโวนา" ] },
+      "จัตุรัสรูปวงรียาวยอดนิยมของโรม ที่มีน้ำพุสามแห่งตั้งเรียงกัน" ] },
     en: { place: "Fountain of the Four Rivers, Piazza Navona, Rome", clues: [
       "Water from four continents meets beneath a dove",
       "An obelisk tops the fountain, with a dove at the very top",
       "Bernini, 1651: the Nile, Ganges, Danube and Río de la Plata",
       "In Rome, on the site of an ancient stadium",
-      "Piazza Navona" ] } },
+      "Rome's long oval piazza with three fountains in a row" ] } },
   { lat: 42.9277, lon: 2.2630, histTh: "หมู่บ้านเล็กบนเนินเขาทางใต้ของฝรั่งเศสแห่งนี้โด่งดังเพราะบาทหลวงเบเรนเจอร์ โซนีแยร์ ที่มาประจำในปี 1885 แล้วใช้เงินจำนวนมากบูรณะโบสถ์ สร้างวิลลาและหอคอยมักดาลา จนเกิดข่าวลือว่าเขาพบสมบัติลับ\nตั้งแต่ทศวรรษ 1950 เรื่องนี้ถูกแต่งเติมจนกลายเป็นตำนานเรื่องจอกศักดิ์สิทธิ์และสมาคมลับ ไพรออรีแห่งไซออน ซึ่งภายหลังพิสูจน์ได้ว่าเอกสารเป็นของปลอม นักประวัติศาสตร์เชื่อว่าเงินของเขามาจากการรับจ้างประกอบพิธีมิสซา",
     th: { place: "แรน-เลอ-ชาโต ฝรั่งเศส", clues: [
       "ปีศาจแบกอ่างน้ำมนต์อยู่ที่ประตูโบสถ์",
@@ -1737,7 +1738,7 @@ $("confirm").onclick = () => {
   else if (state.g.length >= MAX_GUESSES) state.done = true;
   if (!state.done) justRevealed = state.g.length;
   saveLocal(); renderAll();
-  if (state.done) { fitResult(); countFinish(); scrollToResult(); }
+  if (state.done) { fitResult(); countFinish(); sendResult(); scrollToResult(); }
 };
 function fitResult() { map.fitBounds(L.latLngBounds([...state.g, [CASE.lat, CASE.lon]]).pad(0.25), { maxZoom: 13 }); }
 
@@ -2041,6 +2042,42 @@ function scrollToResult() {
   setTimeout(() => { const c = document.getElementById("resultCard"); if (c && !c.hidden) c.scrollIntoView({ behavior: "smooth", block: "start" }); }, 700);
 }
 
+// ---------- anonymous play data for testing (Google Sheet via Apps Script) ----------
+const RESULTS_URL = "https://script.google.com/macros/s/AKfycbzzfkOnhgbwSgHddrvZ286gMrGv-RoBxYcIPE8hZWjf0y8s32OpezgJORBbGU01kKLHIQ/exec";
+const EDITION = typeof ROMAN !== "undefined" ? "world" : "thai";
+const PRIVACY_T = {
+  th: "เกมเก็บผลการเล่นแบบไม่ระบุตัวตน (ข้อที่เล่น จำนวนหมุด ระยะ และเวลา) เพื่อนำไปปรับปรุงเกม",
+  en: "The game records anonymous play results (riddle, pins, distance and time) to help improve it."
+};
+function playerId() {
+  try {
+    let id = localStorage.getItem("pikadlap:player");
+    if (!id) { id = Math.random().toString(36).slice(2, 10); localStorage.setItem("pikadlap:player", id); }
+    return id;
+  } catch (e) { return "anon"; }
+}
+// the clock starts at the first tap on the map for today's riddle
+map.on("click", () => { if (!state.done && !state.t0) { state.t0 = Date.now(); saveLocal(); } });
+function sendResult() {
+  if (PRACTICE !== null || !RESULTS_URL) return;
+  const key = `pikadlap:sent:${EDITION}:${dateKey}`;
+  try { if (localStorage.getItem(key)) return; localStorage.setItem(key, "1"); } catch (e) {}
+  const body = {
+    edition: EDITION, day: dateKey, file: dayIdx + 1, solved: !!state.solved, pins: state.g.length,
+    bestKm: Math.round(bestKm(state) * 10) / 10,
+    seconds: state.t0 ? Math.round((Date.now() - state.t0) / 1000) : "",
+    device: /Line\//i.test(navigator.userAgent) ? "line" : (matchMedia("(max-width: 899px)").matches ? "mobile" : "desktop"),
+    player: playerId(), lang: LANG
+  };
+  try { fetch(RESULTS_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify(body) }).catch(() => {}); } catch (e) {}
+}
+// add the privacy line to the How-to-play list in whichever language is shown
+const applyStaticBase = applyStatic;
+applyStatic = function () {
+  applyStaticBase();
+  const li = document.createElement("li"); li.className = "privacy"; li.textContent = PRIVACY_T[LANG];
+  document.getElementById("helpList").append(li);
+};
 // ---------- boot ----------
 $("helpBtn").onclick = () => $("help").showModal();
 applyStatic();
