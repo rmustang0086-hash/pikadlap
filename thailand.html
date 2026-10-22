@@ -5,6 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>พิกัดลับ · Secret Spot</title>
 <meta name="description" content="ปริศนาสถานที่รายวัน: อ่านคำใบ้ 5 ข้อ แล้วปักหมุดให้ตรงพิกัดบนแผนที่ไทย · A daily Thailand place riddle: read 5 clues and drop a pin on the map.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="พิกัดลับ">
+<meta property="og:title" content="พิกัดลับ — ปริศนาสถานที่ในไทย วันละข้อ">
+<meta property="og:description" content="อ่านคำใบ้ 5 ข้อ แล้วปักหมุดสถานที่ในไทยให้แม่นที่สุด มีข้อใหม่ทุกวัน แชร์ผลแข่งกับเพื่อนได้">
+<meta property="og:url" content="https://rmustang0086-hash.github.io/robert-random/thailand.html">
+<meta property="og:image" content="https://rmustang0086-hash.github.io/robert-random/og-thai.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#e9eeea">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
@@ -63,6 +76,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .confirm:disabled { opacity: .45; cursor: not-allowed; }
 .pin { background: none; border: 0; }
 
+.cluebar { display: none; }
+@media (max-width: 899px) {
+  .cluebar { display: flex; gap: 10px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; font-size: 15px; line-height: 1.45; }
+  .cluebar .cb-n { flex: none; width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; font-family: var(--font-mono); font-size: 13px; background: var(--ink); color: var(--panel); }
+  .cluebar .cb-t { min-width: 0; }
+  .app { gap: 10px; }
+  .mapwrap { height: clamp(340px, 58vh, 520px); }
+}
 .file { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; min-width: 0; }
 .eyebrow { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -105,6 +126,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outlin
 .history h3 { font-family: var(--font-display); font-size: 17px; margin: 0 0 6px; }
 .history p { margin: 0 0 8px; max-width: 70ch; }
 
+.stats { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; display: grid; gap: 8px; }
+.stat-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; text-align: center; }
+.stat b { display: block; font-family: var(--font-display); font-size: 24px; line-height: 1.1; }
+.stat span { font-size: 12px; color: var(--muted); }
+.dist { display: grid; gap: 4px; }
+.dist-line { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 6px; align-items: center; font-size: 12.5px; }
+.dist-line i { display: block; font-style: normal; text-align: right; padding: 1px 6px; border-radius: 4px; background: var(--empty); color: var(--ink); font-family: var(--font-mono); font-size: 12px; }
+.dist-line i.now { background: var(--accent); color: #1a1408; }
 .foot { max-width: 1280px; margin: 18px auto 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
 .foot img { height: 20px; display: block; }
 
@@ -131,6 +160,7 @@ dialog ol { padding-left: 20px; margin: 0 0 12px; }
 </header>
 
 <main class="app">
+  <div class="cluebar" id="cluebar" aria-live="polite"><span class="cb-n" id="cbN"></span><span class="cb-t" id="cbT"></span></div>
   <section class="mapwrap" aria-label="Map">
     <div id="map"></div>
     <div class="hud">
@@ -651,7 +681,7 @@ function pinIcon(color, label, star) {
 // ---------- state ----------
 let state = { g: [], done: false, solved: false };
 let pending = null, justRevealed = -1;
-const LS = () => "pikadlap:web:v1:" + dateKey;
+const LS = () => (PRACTICE !== null ? "pikadlap:web:practice:" : "pikadlap:web:v1:") + dateKey;
 function loadLocal() { try { const v = JSON.parse(localStorage.getItem(LS()) || "null"); if (v && Array.isArray(v.g)) return v; } catch (e) {} return null; }
 function saveLocal() { try { localStorage.setItem(LS(), JSON.stringify(state)); } catch (e) {} }
 const target = () => ({ lat: CASE.lat, lon: CASE.lon });
@@ -720,6 +750,8 @@ function renderClues() {
     li.append(n, p); ol.appendChild(li);
   });
   justRevealed = -1;
+  const bar = document.getElementById("cluebar");
+  if (state.done) bar.hidden = true; else { bar.hidden = false; document.getElementById("cbN").textContent = String(open); document.getElementById("cbT").textContent = caseText().clues[open - 1]; }
 }
 function renderRows() {
   const box = $("rows"); box.replaceChildren();
@@ -746,7 +778,7 @@ function renderRows() {
 }
 function shareText() {
   const lines = state.g.map(g => { const d = guessKm(g), tr = tier(d); return TIER_EMOJI[tr] + (tr === "hit" ? "📍" : ARROWS[Math.round(bearing({ lat: g[0], lon: g[1] }, target()) / 45) % 8]) + " " + fmtKm(d) + " " + t("km"); });
-  return `${t("brand")} #${dayIdx + 1} ${state.solved ? state.g.length : "X"}/${MAX_GUESSES}\n` + lines.join("\n") + (location.protocol.startsWith("http") ? "\n" + location.href.split("#")[0] : "");
+  return `🔍 ${t("brand")} #${dayIdx + 1} · ${state.solved ? state.g.length : "X"}/${MAX_GUESSES}\n` + lines.join("\n") + shareExtra() + (location.protocol.startsWith("http") ? "\n" + location.href.split("#")[0] : "");
 }
 function renderResult() {
   const card = $("resultCard");
@@ -769,6 +801,7 @@ function renderResult() {
   const nx = document.createElement("span"); nx.className = "next"; nx.id = "countdown";
   acts.append(copy, gm, nx);
   card.append(eb, h, p, pre, acts);
+  renderStats(card);
   revealExtras(card, CASE);
   tick();
 }
@@ -905,6 +938,72 @@ function revealExtras(card, c) {
       box.append(sec);
     });
   });
+}
+
+// ---------- personal stats & streak (from this device's saved daily results) ----------
+const STATS_T = {
+  th: { played: "เล่นแล้ว", solved: "ไขได้", streak: "ต่อเนื่อง", best: "สูงสุด", dist: "ไขได้ในกี่หมุด", days: n => `${n} วันติด`, title: "สถิติของคุณ" },
+  en: { played: "Played", solved: "Solved", streak: "Streak", best: "Best", dist: "Pins to solve", days: n => `${n}-day streak`, title: "Your stats" }
+};
+const st = k => STATS_T[LANG][k];
+function dailyResults() {
+  // Only real daily games count; #N practice games are saved under future/past keys but never mark "counted".
+  const prefix = LS().slice(0, -dateKey.length), out = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || !k.startsWith(prefix)) continue;
+      const day = k.slice(prefix.length);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+      const v = JSON.parse(localStorage.getItem(k) || "null");
+      if (v && v.done && Array.isArray(v.g)) out[day] = v;
+    }
+  } catch (e) {}
+  return out;
+}
+function computeStats() {
+  const res = dailyResults(), todayIdx = Math.max(0, Math.floor((Date.now() + TZ - EPOCH) / DAY));
+  const keyOf = i => new Date(EPOCH + i * DAY).toISOString().slice(0, 10);
+  const days = Object.keys(res).filter(d => d <= keyOf(todayIdx)).sort();
+  const solvedN = days.filter(d => res[d].solved).length;
+  const dist = [0, 0, 0, 0, 0];
+  days.forEach(d => { if (res[d].solved && res[d].g.length >= 1 && res[d].g.length <= 5) dist[res[d].g.length - 1]++; });
+  // current streak: consecutive finished days ending today (or yesterday if today isn't finished yet)
+  let i = res[keyOf(todayIdx)] ? todayIdx : todayIdx - 1, cur = 0;
+  while (i >= 0 && res[keyOf(i)]) { cur++; i--; }
+  let best = 0, run = 0, prev = null;
+  days.forEach(d => { const idx = Math.round((Date.parse(d) - EPOCH) / DAY); run = (prev !== null && idx === prev + 1) ? run + 1 : 1; best = Math.max(best, run); prev = idx; });
+  return { played: days.length, solvedPct: days.length ? Math.round(solvedN * 100 / days.length) : 0, streak: cur, best, dist };
+}
+function shareExtra() {
+  if (PRACTICE !== null) return "";
+  const s = computeStats();
+  return s.streak >= 2 ? "\n🔥 " + st("days")(s.streak) : "";
+}
+function renderStats(card) {
+  if (PRACTICE !== null) return;
+  const s = computeStats();
+  const box = document.createElement("section"); box.className = "stats";
+  const h = document.createElement("div"); h.className = "eyebrow"; h.textContent = st("title");
+  const row = document.createElement("div"); row.className = "stat-row";
+  [[s.played, st("played")], [s.solvedPct + "%", st("solved")], [s.streak, st("streak")], [s.best, st("best")]].forEach(([v, l]) => {
+    const c = document.createElement("div"); c.className = "stat";
+    const b = document.createElement("b"); b.textContent = v;
+    const sp = document.createElement("span"); sp.textContent = l;
+    c.append(b, sp); row.append(c);
+  });
+  const dh = document.createElement("div"); dh.className = "eyebrow"; dh.textContent = st("dist");
+  const dist = document.createElement("div"); dist.className = "dist";
+  const max = Math.max(1, ...s.dist);
+  s.dist.forEach((n, i) => {
+    const line = document.createElement("div"); line.className = "dist-line";
+    const lab = document.createElement("span"); lab.textContent = i + 1;
+    const bar = document.createElement("i"); bar.style.width = Math.max(8, n / max * 100) + "%"; bar.textContent = n;
+    if (state.solved && state.g.length === i + 1) bar.className = "now";
+    line.append(lab, bar); dist.append(line);
+  });
+  box.append(h, row, dh, dist);
+  card.append(box);
 }
 
 // ---------- boot ----------
